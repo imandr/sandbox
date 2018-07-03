@@ -1,34 +1,35 @@
-good_modules = ["numpy","math", "random"]
 
-def sandbox(text):
-    import sys, __builtin__, importlib
+import sys, __builtin__, importlib
+
+safe_modules = {m:importlib.import_module(m) 
+                     for m in ["numpy","math", "random"]
+                     }
+
+saved_import = __builtin__.__import__
+
+def safe_import(name, *params):
+    if not name in safe_modules and not name.split(".")[0] in safe_modules:
+        raise ImportError(name)
+
+    if '.' in name:
+        return saved_import(name, *params)
+    else:
+        return safe_modules[name]
+
+builtin_remove = ["open","file","execfile"]
+saved_builtins = {n:getattr(__builtin__, n) for n in builtin_remove}
     
-    my_modules = {}
-    for m in good_modules:
-        my_modules[m] = importlib.import_module(m)
-        
-    def my_import(name, *params):
-        if not name in my_modules and not name.split(".")[0] in my_modules:
-            raise ImportError(name)
-
-        if '.' in name:
-            return saved_import(name, *params)
-        else:
-            return my_list[name]
-        
+def sandbox(func, *params):
     try:
-        saved_open = __builtin__.open
-        saved_file = __builtin__.file
-        saved_import = __builtin__.__import__
+        __builtin__.__import__ = safe_import
+        
+        for n in builtin_remove:
+            delattr(__builtin__, n)
 
-        __builtin__.__import__ = my_import
-        del __builtin__.open
-        del __builtin__.file
-
-        exec text in {}, {}
+        return func(*params)
     except:
         raise
     finally:
         __builtin__.__import__ = saved_import
-        __builtin__.open = saved_open
-        __builtin__.file = saved_file
+        for n, s in saved_builtins.items():
+            setattr(__builtin__, n, s)
